@@ -1220,13 +1220,35 @@ class CT_MathOmathPara(BaseOxmlElement):
 
 
 class CT_Math(BaseOxmlElement):
-    """`a14:m` custom element class, container for `m:oMathPara`."""
-    oMathPara: CT_MathOmathPara = OneAndOnlyOne("m:oMathPara")  # pyright: ignore[reportAssignmentType]
+    """`a14:m` custom element class.
+    This element serves as a container for either an `m:oMathPara` element (typically for block math)
+    or an `m:oMath` element (typically for inline math).
+    """
+    # According to ECMA-376, Part 1, 4th ed., CT_MathFormula (which a14:m maps to)
+    # has a choice of m:oMathPara or m:oMath, with minOccurs="1" and maxOccurs="1".
+    # We define them as ZeroOrOne here and implement the choice logic and validation
+    # in the to_latex method.
+    oMathPara: CT_MathOmathPara | None = ZeroOrOne("m:oMathPara", successors=())
+    oMath: CT_OMath | None = ZeroOrOne("m:oMath", successors=())
 
     def to_latex(self) -> str:
-        return self.oMathPara.to_latex()
+        """Converts the contained math content (either m:oMathPara or m:oMath) to LaTeX."""
+        if self.oMathPara is not None:
+            return self.oMathPara.to_latex()
+        elif self.oMath is not None:
+            return self.oMath.to_latex()
+        else:
+            # This state implies the a14:m element is missing its required
+            # m:oMathPara or m:oMath child, violating the schema.
+            raise InvalidXmlError(
+                "Required m:oMathPara or m:oMath child not found in a14:m element."
+            )
 
     @property
     def text(self) -> str: # pyright: ignore[reportIncompatibleMethodOverride]
+        """Returns the LaTeX representation of the math content, enclosed in '$'."""
         latex_content = self.to_latex()
+        # If to_latex successfully returns (i.e., valid math content was found and converted),
+        # and that content happens to be an empty string, f"${latex_content}$" will correctly produce "$$".
+        # If to_latex raises InvalidXmlError due to a malformed a14:m, that error will propagate.
         return f"${latex_content}$"
