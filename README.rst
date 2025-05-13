@@ -23,3 +23,20 @@ python-pptx.
 
 .. _`examples with screenshots`:
    https://python-pptx.readthedocs.org/en/latest/user/quickstart.html
+
+
+Work in Progress - MathML to LaTeX Conversion
+---------------------------------------------
+
+An experimental feature is currently under development to enable the parsing of
+MathML (specifically ``<m:oMath>`` elements and their children) embedded within
+PowerPoint files and convert them into LaTeX strings.
+
+This functionality allows for the extraction of mathematical equations from slides.
+When parsed, these math elements are treated as special run objects within a
+paragraph's ``runs`` collection. The LaTeX representation of the math equation can
+then be accessed via the ``run.text`` property (e.g., a math run might return
+a string like ``'$x^2 + y^2 = z^2$'``).
+
+Please note that this feature is still experimental and its API or behavior might
+change in future updates.

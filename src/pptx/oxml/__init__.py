@@ -15,12 +15,34 @@ from pptx.oxml.ns import NamespacePrefixedTag
 from pptx.oxml.text import (
     CT_Math,
     CT_MathBaseArgument,
+    CT_MathDegree,
+    CT_MathDegreeHide,
     CT_MathDelimiter,
     CT_MathDelimiterProperties,
+    CT_MathDenominator,
+    CT_MathFName,
+    CT_MathFraction,
+    CT_MathFractionPr,
+    CT_MathFunc,
+    CT_MathFuncPr,
+    CT_MathGroupChar,
+    CT_MathGroupChrPr,
+    CT_MathLimLow,
+    CT_MathNary,
+    CT_MathNaryPr,
+    CT_MathNumerator,
+    CT_MathOmathPara,
+    CT_MathRad,
+    CT_MathRadPr,
     CT_MathRun,
     CT_MathSubscript,
+    CT_MathSubscriptArgument,
+    CT_MathSuperscript,
+    CT_MathSuperscriptArgument,
+    CT_MathSuperscriptPr,
     CT_MathText,
     CT_OMath,
+    CT_MathVal,
 )
 
 # --- Import parser and lookup from the new module ---
@@ -491,7 +513,7 @@ from pptx.oxml.theme import CT_OfficeStyleSheet  # noqa: E402
 
 register_element_cls("a:theme", CT_OfficeStyleSheet)
 
-# --- Register MathML elements (m: namespace) ---
+# Register MathML elements (m: namespace)
 register_element_cls("m:oMath", CT_OMath)
 register_element_cls("m:r", CT_MathRun)
 register_element_cls("m:t", CT_MathText)
@@ -499,6 +521,35 @@ register_element_cls("m:d", CT_MathDelimiter)
 register_element_cls("m:dPr", CT_MathDelimiterProperties)
 register_element_cls("m:e", CT_MathBaseArgument)
 register_element_cls("m:sSub", CT_MathSubscript)
+register_element_cls("m:oMathPara", CT_MathOmathPara)
+register_element_cls("m:rad", CT_MathRad)
+register_element_cls("m:radPr", CT_MathRadPr)
+register_element_cls("m:deg", CT_MathDegree)
+register_element_cls("m:degHide", CT_MathDegreeHide)
+register_element_cls("m:f", CT_MathFraction)
+register_element_cls("m:fPr", CT_MathFractionPr)
+register_element_cls("m:num", CT_MathNumerator)
+register_element_cls("m:den", CT_MathDenominator)
+register_element_cls("m:sSup", CT_MathSuperscript)
+register_element_cls("m:sSupPr", CT_MathSuperscriptPr)
+register_element_cls("m:sup", CT_MathSuperscriptArgument)
+register_element_cls("m:sub", CT_MathSubscriptArgument)
+register_element_cls("m:nary", CT_MathNary)
+register_element_cls("m:naryPr", CT_MathNaryPr)
+register_element_cls("m:func", CT_MathFunc)
+register_element_cls("m:funcPr", CT_MathFuncPr)
+register_element_cls("m:limLow", CT_MathLimLow)
+register_element_cls("m:lim", CT_MathBaseArgument)
+register_element_cls("m:fName", CT_MathFName)
+register_element_cls("m:groupChr", CT_MathGroupChar)
+register_element_cls("m:groupChrPr", CT_MathGroupChrPr)
 
-# --- Register container element (a14: namespace) ---
+# Register container element (a14: namespace)
 register_element_cls("a14:m", CT_Math)
+
+# Specific elements that use m:val attribute
+register_element_cls("m:begChr", CT_MathVal)
+register_element_cls("m:endChr", CT_MathVal)
+register_element_cls("m:chr", CT_MathVal) # For m:naryPr/m:chr, m:groupChrPr/m:chr
+register_element_cls("m:pos", CT_MathVal) # For m:groupChrPr/m:pos
+# register_element_cls("m:sepChr", CT_MathVal) # If sepChr is added to CT_MathDelimiterProperties

@@ -26,6 +26,7 @@ from pptx.oxml.simpletypes import (
     ST_TextTypeface,
     ST_TextWrappingType,
     XsdBoolean,
+    XsdString,
 )
 from pptx.oxml.xmlchemy import (
     BaseOxmlElement,
@@ -632,10 +633,45 @@ class CT_MathText(BaseOxmlElement):
     @property
     def text(self) -> str: # pyright: ignore[reportIncompatibleMethodOverride]
         """Text content of the element."""
-        # Parent implementation might be sufficient, but override if needed.
-        # Need to handle potential XML entities if they appear in math text.
-        text = super().text
-        return text or ""
+        text_content = super().text
+        return text_content or ""
+
+
+_MATH_CHAR_TO_LATEX_CONVERSION = {
+    # Math Italic Small
+    "𝑎": "a", "𝑏": "b", "𝑐": "c", "𝑑": "d", "𝑒": "e", "𝑓": "f", "𝑔": "g", "ℎ": "h",
+    "𝑖": "i", "𝑗": "j", "𝑘": "k", "𝑙": "l", "𝑚": "m", "𝑛": "n", "𝑜": "o", "𝑝": "p",
+    "𝑞": "q", "𝑟": "r", "𝑠": "s", "𝑡": "t", "𝑢": "u", "𝑣": "v", "𝑤": "w", "𝑥": "x",
+    "𝑦": "y", "𝑧": "z",
+    # Math Italic Capital
+    "𝐴": "A", "𝐵": "B", "𝐶": "C", "𝐷": "D", "𝐸": "E", "𝐹": "F", "𝐺": "G", "𝐻": "H",
+    "𝐼": "I", "𝐽": "J", "𝐾": "K", "𝐿": "L", "𝑀": "M", "𝑁": "N", "𝑂": "O", "𝑃": "P",
+    "𝑄": "Q", "𝑅": "R", "𝑆": "S", "𝑇": "T", "𝑈": "U", "𝑉": "V", "𝑊": "W", "𝑋": "X",
+    "𝑌": "Y", "𝑍": "Z",
+    # Symbols
+    "×": "\\times ",
+    "÷": "\\div ",
+    "−": "-",  # Minus sign (U+2212) to hyphen-minus
+    "∗": "*",  # Asterisk operator (U+2217) to asterisk
+    "·": "\\cdot ",  # Middle dot (U+00B7)
+    "→": "\\to ",  # Rightwards arrow (U+2192)
+    "∞": "\\infty ",  # Infinity (U+221E)
+    # Greek letters (add more as needed)
+    "α": "\\alpha ", "β": "\\beta ", "γ": "\\gamma ", "δ": "\\delta ", "ε": "\\epsilon ",
+    "ζ": "\\zeta ", "η": "\\eta ", "θ": "\\theta ", "ι": "\\iota ", "κ": "\\kappa ",
+    "λ": "\\lambda ", "μ": "\\mu ", "ν": "\\nu ", "ξ": "\\xi ", "ο": "o", "π": "\\pi ",
+    "ρ": "\\rho ", "σ": "\\sigma ", "τ": "\\tau ", "υ": "\\upsilon ", "φ": "\\phi ",
+    "χ": "\\chi ", "ψ": "\\psi ", "ω": "\\omega ",
+    "Γ": "\\Gamma ", "Δ": "\\Delta ", "Θ": "\\Theta ", "Λ": "\\Lambda ", "Ξ": "\\Xi ",
+    "Π": "\\Pi ", "Σ": "\\Sigma ", "Φ": "\\Phi ", "Ψ": "\\Psi ", "Ω": "\\Omega ",
+}
+
+
+class CT_MathVal(BaseOxmlElement):
+    """Generic MathML element that primarily serves to hold an m:val attribute.
+    Used for elements like <m:begChr m:val="value"/>.
+    """
+    val: str = RequiredAttribute("m:val", XsdString)  # pyright: ignore[reportAssignmentType]
 
 
 class CT_MathRun(BaseOxmlElement):
@@ -646,173 +682,551 @@ class CT_MathRun(BaseOxmlElement):
     t: CT_MathText = OneAndOnlyOne("m:t")  # pyright: ignore[reportAssignmentType]
     del _tag_seq
 
-    def _init(self) -> None:
-        # print(f"--- Initializing CT_MathRun for tag: {self.tag}, text during init: '{self.t.text if self.t is not None else "NO_T_ELEM"}' ---")
-        pass
-
     @property
     def text(self) -> str: # pyright: ignore[reportIncompatibleMethodOverride]
         """Text content of the `m:t` child."""
         return self.t.text
 
     def to_latex(self) -> str:
-        """Return the text content for LaTeX conversion."""
+        """Return the text content for LaTeX conversion, with character mapping."""
         current_text = self.text
-        # print(f"--- CT_MathRun.to_latex() called for tag: {self.tag}, text: '{current_text}' ---")
-        if current_text == "×":
-            return "\\times "
-        return current_text
+        converted_text = "".join(
+            _MATH_CHAR_TO_LATEX_CONVERSION.get(char, char) for char in current_text
+        )
+        return converted_text
 
 
 class CT_MathBaseArgument(BaseOxmlElement):
     """`m:e` custom element class, representing a base argument for math structures."""
-    # Can contain runs and potentially other math elements
     r = ZeroOrMore("m:r")
-    # Define r_lst based on the ZeroOrMore definition
-    r_lst: list[CT_MathRun]
+    d = ZeroOrMore("m:d")
+    sSub = ZeroOrMore("m:sSub")
+    rad = ZeroOrMore("m:rad")
+    f = ZeroOrMore("m:f")
+    sSup = ZeroOrMore("m:sSup")
+    nary = ZeroOrMore("m:nary")
+    func = ZeroOrMore("m:func")
+    groupChr = ZeroOrMore("m:groupChr")
 
-    # Add sequence definitions for other potential children if needed
+    r_lst: list[CT_MathRun]
+    d_lst: list[CT_MathDelimiter]
+    sSub_lst: list[CT_MathSubscript]
+    rad_lst: list[CT_MathRad]
+    f_lst: list[CT_MathFraction]
+    sSup_lst: list[CT_MathSuperscript]
+    nary_lst: list[CT_MathNary]
+    func_lst: list[CT_MathFunc]
+    groupChr_lst: list[CT_MathGroupChar]
 
     def to_latex(self) -> str:
-        """Convert the base argument content to a LaTeX string."""
-        return "".join(child.to_latex() for child in self.r_lst) # Simplified for now
+        latex_parts: list[str] = []
+        for child in self:
+            child_latex = ""
+            if hasattr(child, "to_latex") and callable(child.to_latex):
+                child_latex = child.to_latex()
+            if child_latex:
+                latex_parts.append(child_latex)
+        return "".join(latex_parts)
 
 
 class CT_MathDelimiterProperties(BaseOxmlElement):
     """`m:dPr` custom element class for delimiter properties."""
-    # Define children like m:begChr, m:endChr, m:ctrlPr etc. as needed
-    pass # Placeholder
+    _tag_seq = ("m:begChr", "m:sepChr", "m:endChr", "m:grow", "m:shp", "m:ctrlPr")
+    begChr: CT_MathVal | None = ZeroOrOne("m:begChr", successors=_tag_seq[1:]) # pyright: ignore[reportAssignmentType]
+    endChr: CT_MathVal | None = ZeroOrOne("m:endChr", successors=_tag_seq[3:]) # pyright: ignore[reportAssignmentType]
+    del _tag_seq
 
 
 class CT_MathDelimiter(BaseOxmlElement):
     """`m:d` custom element class for delimiters (parentheses, brackets, etc.)."""
-
-    dPr = ZeroOrOne("m:dPr") # Properties like begin/end characters
-    e = OneOrMore("m:e") # The content inside the delimiters
-
-    # Define e_lst based on the OneOrMore definition
+    dPr: CT_MathDelimiterProperties | None = ZeroOrOne("m:dPr") # pyright: ignore[reportAssignmentType]
+    e = OneOrMore("m:e")
     e_lst: list[CT_MathBaseArgument]
 
-    def _init(self) -> None:
-        # print(f"--- Initializing CT_MathDelimiter for tag: {self.tag} ---")
-        pass
-
     def to_latex(self) -> str:
-        """Convert the delimited structure to LaTeX.
+        begin_char_raw = "("
+        end_char_raw = ")"
 
-        Assumes parentheses if dPr is not detailed yet.
-        Handles content from all m:e elements.
-        TODO: Inspect dPr for specific begin/end chars when implemented.
-        """
-        begin_char = "("
-        end_char = ")"
+        if self.dPr is not None:
+            if self.dPr.begChr is not None:
+                begin_char_raw = self.dPr.begChr.val
+            if self.dPr.endChr is not None:
+                end_char_raw = self.dPr.endChr.val
+
+        delimiter_map = {
+            "(": "(", ")": ")",
+            "[": "[", "]": "]",
+            "{": "\\{", "}": "\\}",
+            "|": ("\\lvert", "\\rvert"),
+            "‖": ("\\lVert", "\\rVert"),
+            "<": "\\langle", ">": "\\rangle",
+            "⌈": "\\lceil", "⌉": "\\rceil",
+            "⌊": "\\lfloor", "⌋": "\\rfloor",
+            "/": "/",
+            "\\": "\\backslash",
+            "↑": "\\uparrow",
+            "↓": "\\downarrow",
+            "↕": "\\updownarrow",
+            '〈': '\\langle', '〉': '\\rangle',
+        }
+
+        begin_latex_entry = delimiter_map.get(begin_char_raw, begin_char_raw)
+        end_latex_entry = delimiter_map.get(end_char_raw, end_char_raw)
+
+        begin_latex = begin_latex_entry[0] if isinstance(begin_latex_entry, tuple) else begin_latex_entry
+        end_latex = end_latex_entry[1] if isinstance(end_latex_entry, tuple) else end_latex_entry
+        
+        if begin_char_raw == end_char_raw and isinstance(begin_latex_entry, tuple) and len(begin_latex_entry) == 2:
+             begin_latex = begin_latex_entry[0]
+             end_latex = begin_latex_entry[1]
 
         if not self.e_lst:
-            # print(f"--- CT_MathDelimiter.to_latex() (empty) -> '()'")
-            return f"{begin_char}{end_char}" # Empty delimiters
+            return f"\\left{begin_latex}\\right{end_latex}"
 
-        # Concatenate LaTeX from ALL <m:e> children
         content_latex = "".join(child_e.to_latex() for child_e in self.e_lst)
-        result = f"{begin_char}{content_latex}{end_char}"
-        # print(f"--- CT_MathDelimiter.to_latex() called for tag: {self.tag}, content: '{content_latex}', result: '{result}' ---")
-        return result
+
+        final_begin_latex = begin_latex
+        if begin_latex.startswith("\\") and content_latex:
+            final_begin_latex += " " 
+
+        final_end_latex = end_latex
+
+        return f"\\left{final_begin_latex}{content_latex}\\right{final_end_latex}"
+
+
+class CT_MathSubscriptArgument(BaseOxmlElement):
+    """`m:sub` custom element class."""
+    e: CT_MathBaseArgument | None = ZeroOrOne("m:e")  # pyright: ignore[reportAssignmentType]
+    r = ZeroOrMore("m:r")
+    d = ZeroOrMore("m:d")
+    sSub = ZeroOrMore("m:sSub")
+    rad = ZeroOrMore("m:rad")
+    f = ZeroOrMore("m:f")
+    sSup = ZeroOrMore("m:sSup")
+    nary = ZeroOrMore("m:nary")
+    func = ZeroOrMore("m:func")
+    groupChr = ZeroOrMore("m:groupChr")
+    
+    r_lst: list[CT_MathRun]
+    d_lst: list[CT_MathDelimiter]
+    sSub_lst: list[CT_MathSubscript]
+    rad_lst: list[CT_MathRad]
+    f_lst: list[CT_MathFraction]
+    sSup_lst: list[CT_MathSuperscript]
+    nary_lst: list[CT_MathNary]
+    func_lst: list[CT_MathFunc]
+    groupChr_lst: list[CT_MathGroupChar]
+
+    def to_latex(self) -> str:
+        if self.e is not None:
+            return self.e.to_latex()
+        latex_parts: list[str] = []
+        for child in self:
+            child_latex = ""
+            if hasattr(child, "to_latex") and callable(child.to_latex):
+                child_latex = child.to_latex()
+            if child_latex:
+                latex_parts.append(child_latex)
+        return "".join(latex_parts)
 
 
 class CT_MathSubscript(BaseOxmlElement):
     """`m:sSub` custom element class for subscript structures."""
-
-    # According to schema, sSub contains exactly two `m:e` elements:
-    # e[0]: Base
-    # e[1]: Subscript
-    e = OneOrMore("m:e") # Should be exactly 2
-    e_lst: list[CT_MathBaseArgument]
-
-    def _init(self) -> None:
-        # print(f"--- Initializing CT_MathSubscript for tag: {self.tag} ---")
-        pass
+    e: CT_MathBaseArgument = OneAndOnlyOne("m:e")  # pyright: ignore[reportAssignmentType]
+    sub: CT_MathSubscriptArgument = OneAndOnlyOne("m:sub")  # pyright: ignore[reportAssignmentType]
 
     def to_latex(self) -> str:
-        """Convert the subscript structure to LaTeX: base_{subscript}."""
-        if len(self.e_lst) != 2:
-            # print(f"WARN: Expected 2 <m:e> in <m:sSub>, found {len(self.e_lst)}. Concatenating.")
-            result = "".join(e.to_latex() for e in self.e_lst)
-            return result
+        base_latex = self.e.to_latex()
+        subscript_latex = self.sub.to_latex()
+        if len(subscript_latex) > 1 or any(c in subscript_latex for c in r"\\ {}[]()^_"):
+            return f"{base_latex}_{{{subscript_latex}}}"
+        if not subscript_latex:
+             return base_latex
+        return f"{base_latex}_{subscript_latex}"
 
-        base_latex = self.e_lst[0].to_latex()
-        subscript_latex = self.e_lst[1].to_latex()
-        result = ""
 
-        # Add braces if subscript is longer than one char or contains spaces/commands
-        if len(subscript_latex) > 1 or any(c in subscript_latex for c in r"\ {}[]()^_"): # Basic check
-            result = f"{base_latex}_{{{subscript_latex}}}"
+class CT_MathDegree(BaseOxmlElement):
+    """`m:deg` custom element class, container for the degree expression `m:e`."""
+    e: CT_MathBaseArgument | None = ZeroOrOne("m:e") # pyright: ignore[reportAssignmentType]
+
+    def to_latex(self) -> str:
+        if self.e is not None:
+            return self.e.to_latex()
+        return ""
+
+
+class CT_MathDegreeHide(BaseOxmlElement):
+    """`m:degHide` element, its `val` attribute (xsd:boolean) indicates hide state."""
+    val: XsdBoolean = OptionalAttribute("m:val", XsdBoolean, default=True) # pyright: ignore[reportAssignmentType]
+
+
+class CT_MathRadPr(BaseOxmlElement):
+    """`m:radPr` custom element class for radical properties."""
+    _tag_seq = ("m:degHide", "m:ctrlPr")
+    degHide: CT_MathDegreeHide | None = ZeroOrOne("m:degHide", successors=_tag_seq[1:]) # pyright: ignore[reportAssignmentType]
+    del _tag_seq
+
+
+class CT_MathRad(BaseOxmlElement):
+    """`m:rad` custom element class for radicals (roots)."""
+    radPr: CT_MathRadPr | None = ZeroOrOne("m:radPr", successors=("m:deg", "m:e")) # pyright: ignore[reportAssignmentType]
+    deg: CT_MathDegree | None = ZeroOrOne("m:deg", successors=("m:e",)) # pyright: ignore[reportAssignmentType]
+    e: CT_MathBaseArgument = OneAndOnlyOne("m:e") # pyright: ignore[reportAssignmentType]
+
+    def to_latex(self) -> str:
+        base_latex = self.e.to_latex()
+        degree_latex = ""
+        if self.deg is not None:
+            deg_content = self.deg.to_latex()
+            if deg_content.strip():
+                degree_latex = deg_content
+
+        hide_degree_flag = False
+        if self.radPr is not None and self.radPr.degHide is not None:
+            hide_degree_flag = self.radPr.degHide.val
+
+        if degree_latex and not hide_degree_flag:
+            return f"\\sqrt[{degree_latex}]{{{base_latex}}}"
+        return f"\\sqrt{{{base_latex}}}"
+
+
+class CT_MathNumerator(BaseOxmlElement):
+    """`m:num` custom element class, container for the numerator expression."""
+    e: CT_MathBaseArgument | None = ZeroOrOne("m:e")  # pyright: ignore[reportAssignmentType]
+    r = ZeroOrMore("m:r")
+    d = ZeroOrMore("m:d")
+    sSub = ZeroOrMore("m:sSub")
+    rad = ZeroOrMore("m:rad")
+    f = ZeroOrMore("m:f")
+    sSup = ZeroOrMore("m:sSup")
+    nary = ZeroOrMore("m:nary")
+    func = ZeroOrMore("m:func")
+    groupChr = ZeroOrMore("m:groupChr")
+    
+    r_lst: list[CT_MathRun]
+    d_lst: list[CT_MathDelimiter]
+    sSub_lst: list[CT_MathSubscript]
+    rad_lst: list[CT_MathRad]
+    f_lst: list[CT_MathFraction]
+    sSup_lst: list[CT_MathSuperscript]
+    nary_lst: list[CT_MathNary]
+    func_lst: list[CT_MathFunc]
+    groupChr_lst: list[CT_MathGroupChar]
+
+    def to_latex(self) -> str:
+        if self.e is not None:
+            return self.e.to_latex()
+        latex_parts: list[str] = []
+        for child in self:
+            child_latex = ""
+            if hasattr(child, "to_latex") and callable(child.to_latex):
+                child_latex = child.to_latex()
+            if child_latex:
+                latex_parts.append(child_latex)
+        return "".join(latex_parts)
+
+
+class CT_MathDenominator(BaseOxmlElement):
+    """`m:den` custom element class, container for the denominator expression."""
+    e: CT_MathBaseArgument | None = ZeroOrOne("m:e")  # pyright: ignore[reportAssignmentType]
+    r = ZeroOrMore("m:r")
+    d = ZeroOrMore("m:d")
+    sSub = ZeroOrMore("m:sSub")
+    rad = ZeroOrMore("m:rad")
+    f = ZeroOrMore("m:f")
+    sSup = ZeroOrMore("m:sSup")
+    nary = ZeroOrMore("m:nary")
+    func = ZeroOrMore("m:func")
+    groupChr = ZeroOrMore("m:groupChr")
+
+    r_lst: list[CT_MathRun]
+    d_lst: list[CT_MathDelimiter]
+    sSub_lst: list[CT_MathSubscript]
+    rad_lst: list[CT_MathRad]
+    f_lst: list[CT_MathFraction]
+    sSup_lst: list[CT_MathSuperscript]
+    nary_lst: list[CT_MathNary]
+    func_lst: list[CT_MathFunc]
+    groupChr_lst: list[CT_MathGroupChar]
+
+    def to_latex(self) -> str:
+        if self.e is not None:
+            return self.e.to_latex()
+        latex_parts: list[str] = []
+        for child in self:
+            child_latex = ""
+            if hasattr(child, "to_latex") and callable(child.to_latex):
+                child_latex = child.to_latex()
+            if child_latex:
+                latex_parts.append(child_latex)
+        return "".join(latex_parts)
+
+
+class CT_MathFractionPr(BaseOxmlElement):
+    """`m:fPr` custom element class for fraction properties."""
+    pass
+
+
+class CT_MathFraction(BaseOxmlElement):
+    """`m:f` custom element class for fractions."""
+    fPr: CT_MathFractionPr | None = ZeroOrOne("m:fPr", successors=("m:num", "m:den")) # pyright: ignore[reportAssignmentType]
+    num: CT_MathNumerator = OneAndOnlyOne("m:num") # pyright: ignore[reportAssignmentType]
+    den: CT_MathDenominator = OneAndOnlyOne("m:den") # pyright: ignore[reportAssignmentType]
+
+    def to_latex(self) -> str:
+        num_latex = self.num.to_latex()
+        den_latex = self.den.to_latex()
+        return f"\\frac{{{num_latex}}}{{{den_latex}}}"
+
+
+class CT_MathSuperscriptArgument(BaseOxmlElement):
+    """`m:sup` custom element class."""
+    e: CT_MathBaseArgument | None = ZeroOrOne("m:e")  # pyright: ignore[reportAssignmentType]
+    r = ZeroOrMore("m:r")
+    d = ZeroOrMore("m:d")
+    sSub = ZeroOrMore("m:sSub")
+    rad = ZeroOrMore("m:rad")
+    f = ZeroOrMore("m:f")
+    sSup = ZeroOrMore("m:sSup")
+    nary = ZeroOrMore("m:nary")
+    func = ZeroOrMore("m:func")
+    groupChr = ZeroOrMore("m:groupChr")
+
+    r_lst: list[CT_MathRun]
+    d_lst: list[CT_MathDelimiter]
+    sSub_lst: list[CT_MathSubscript]
+    rad_lst: list[CT_MathRad]
+    f_lst: list[CT_MathFraction]
+    sSup_lst: list[CT_MathSuperscript]
+    nary_lst: list[CT_MathNary]
+    func_lst: list[CT_MathFunc]
+    groupChr_lst: list[CT_MathGroupChar]
+    
+    def to_latex(self) -> str:
+        if self.e is not None:
+            return self.e.to_latex()
+        latex_parts: list[str] = []
+        for child in self:
+            child_latex = ""
+            if hasattr(child, "to_latex") and callable(child.to_latex):
+                child_latex = child.to_latex()
+            if child_latex:
+                latex_parts.append(child_latex)
+        return "".join(latex_parts)
+
+
+class CT_MathSuperscriptPr(BaseOxmlElement):
+    """`m:sSupPr` custom element class for superscript properties."""
+    pass
+
+
+class CT_MathSuperscript(BaseOxmlElement):
+    """`m:sSup` custom element class for superscript structures."""
+    sSupPr: CT_MathSuperscriptPr | None = ZeroOrOne("m:sSupPr", successors=("m:e", "m:sup")) # pyright: ignore[reportAssignmentType]
+    e: CT_MathBaseArgument = OneAndOnlyOne("m:e") # pyright: ignore[reportAssignmentType]
+    sup: CT_MathSuperscriptArgument = OneAndOnlyOne("m:sup") # pyright: ignore[reportAssignmentType]
+
+    def to_latex(self) -> str:
+        base_latex = self.e.to_latex()
+        sup_latex = self.sup.to_latex()
+        if len(sup_latex) > 1 or any(c in sup_latex for c in r"\\ {}[]()^_"):
+            return f"{base_latex}^{{{sup_latex}}}"
+        return f"{base_latex}^{sup_latex}"
+
+
+class CT_MathNaryPr(BaseOxmlElement):
+    """`m:naryPr` custom element class for N-ary operator properties."""
+    _tag_seq = ("m:chr", "m:limLoc", "m:grow", "m:subHide", "m:supHide", "m:ctrlPr")
+    chr: CT_MathVal | None = ZeroOrOne("m:chr", successors=_tag_seq[1:]) # pyright: ignore[reportAssignmentType]
+    del _tag_seq
+
+
+class CT_MathNary(BaseOxmlElement):
+    """`m:nary` custom element class for N-ary operators (sum, integral, etc.)."""
+    naryPr: CT_MathNaryPr | None = ZeroOrOne("m:naryPr", successors=("m:sub", "m:sup", "m:e")) # pyright: ignore[reportAssignmentType]
+    sub: CT_MathSubscriptArgument | None = ZeroOrOne("m:sub", successors=("m:sup", "m:e")) # pyright: ignore[reportAssignmentType]
+    sup: CT_MathSuperscriptArgument | None = ZeroOrOne("m:sup", successors=("m:e",)) # pyright: ignore[reportAssignmentType]
+    e: CT_MathBaseArgument = OneAndOnlyOne("m:e") # pyright: ignore[reportAssignmentType]
+
+    def to_latex(self) -> str:
+        op_char_xml = ""
+        if self.naryPr is not None and self.naryPr.chr is not None:
+            op_char_xml = self.naryPr.chr.val
+        
+        op_latex = ""
+        if not op_char_xml: 
+            op_latex = "\\int" 
+        elif op_char_xml == "∫":
+            op_latex = "\\int"
+        elif op_char_xml == "∑":
+            op_latex = "\\sum"
+        elif op_char_xml == "∏":
+            op_latex = "\\prod"
+        elif op_char_xml == "∐": 
+            op_latex = "\\coprod"
+        elif op_char_xml == "⋃": 
+            op_latex = "\\bigcup"
+        elif op_char_xml == "⋂":
+            op_latex = "\\bigcap"
         else:
-            result = f"{base_latex}_{subscript_latex}"
-        return result
+            op_latex = _MATH_CHAR_TO_LATEX_CONVERSION.get(op_char_xml, op_char_xml)
+            if not op_latex.startswith("\\") and len(op_latex) > 1 :
+                 op_latex = f"\\operatorname{{{op_latex}}}"
+
+        sub_latex_str = ""
+        if self.sub is not None:
+            processed_sub = self.sub.to_latex()
+            if processed_sub: 
+                 sub_latex_str = f"_{{{processed_sub}}}" if len(processed_sub) > 1 or any(c in processed_sub for c in r"\\ {}[]()^_") else f"_{processed_sub}"
+
+        sup_latex_str = ""
+        if self.sup is not None:
+            processed_sup = self.sup.to_latex()
+            if processed_sup: 
+                sup_latex_str = f"^{{{processed_sup}}}" if len(processed_sup) > 1 or any(c in processed_sup for c in r"\\ {}[]()^_") else f"^{processed_sup}"
+
+        expr_latex = self.e.to_latex()
+        spacing = " " if expr_latex and op_latex.startswith("\\") else ""
+        return f"{op_latex}{sub_latex_str}{sup_latex_str}{spacing}{expr_latex}"
+
+
+class CT_MathFuncPr(BaseOxmlElement):
+    """`m:funcPr` custom element class for function properties."""
+    pass
+
+
+class CT_MathLimLow(BaseOxmlElement):
+    """`m:limLow` custom element class for 'limit from below' structures like lim."""
+    e: CT_MathBaseArgument = OneAndOnlyOne("m:e") # pyright: ignore[reportAssignmentType]
+    lim: CT_MathBaseArgument = OneAndOnlyOne("m:lim") # pyright: ignore[reportAssignmentType]
+
+    def to_latex(self) -> str:
+        func_name_latex = self.e.to_latex().strip()
+        if not func_name_latex.startswith("\\") and any(c.isalpha() for c in func_name_latex) and len(func_name_latex) > 1:
+            func_name_latex = f"\\operatorname{{{func_name_latex}}}"
+        lim_expr_latex = self.lim.to_latex()
+        return f"{func_name_latex}_{{{lim_expr_latex}}}"
+
+
+class CT_MathFName(BaseOxmlElement):
+    """`m:fName` custom element class for the 'name' part of a function."""
+    r = ZeroOrMore("m:r")
+    limLow: CT_MathLimLow | None = ZeroOrOne("m:limLow") # pyright: ignore[reportAssignmentType]
+    r_lst: list[CT_MathRun]
+
+    def to_latex(self) -> str:
+        if self.limLow is not None:
+            return self.limLow.to_latex()
+        name_parts = [child.to_latex() for child in self.r_lst]
+        raw_name = "".join(name_parts).strip()
+        known_functions_needing_backslash = {"sin", "cos", "tan", "log", "ln", "exp", "det", "gcd", "lim", "mod", "max", "min"}
+        if raw_name.startswith("\\"):
+            return raw_name
+        if raw_name in known_functions_needing_backslash:
+            return f"\\{raw_name}"
+        if len(raw_name) > 1 and all(c.isalpha() for c in raw_name):
+            return f"\\operatorname{{{raw_name}}}"
+        return raw_name
+
+
+class CT_MathFunc(BaseOxmlElement):
+    """`m:func` custom element class for functions."""
+    funcPr: CT_MathFuncPr | None = ZeroOrOne("m:funcPr", successors=("m:fName", "m:e")) # pyright: ignore[reportAssignmentType]
+    fName: CT_MathFName = OneAndOnlyOne("m:fName") # pyright: ignore[reportAssignmentType]
+    e: CT_MathBaseArgument = OneAndOnlyOne("m:e") # pyright: ignore[reportAssignmentType]
+
+    def to_latex(self) -> str:
+        fname_latex = self.fName.to_latex()
+        arg_latex = self.e.to_latex()
+        if "_" in fname_latex or "^" in fname_latex or fname_latex.endswith("}"):
+             return f"{fname_latex} {arg_latex}"
+        return f"{fname_latex}({arg_latex})"
+
+
+class CT_MathGroupChrPr(BaseOxmlElement):
+    """`m:groupChrPr` custom element class for group character properties."""
+    _tag_seq = ("m:chr", "m:pos", "m:vertJc", "m:ctrlPr")
+    chr: CT_MathVal | None = ZeroOrOne("m:chr", successors=_tag_seq[1:]) # pyright: ignore[reportAssignmentType]
+    pos: CT_MathVal | None = ZeroOrOne("m:pos", successors=_tag_seq[2:]) # pyright: ignore[reportAssignmentType]
+    del _tag_seq
+
+
+class CT_MathGroupChar(BaseOxmlElement):
+    """`m:groupChr` custom element class for grouped characters (accents)."""
+    groupChrPr: CT_MathGroupChrPr | None = ZeroOrOne("m:groupChrPr", successors=("m:e",)) # pyright: ignore[reportAssignmentType]
+    e: CT_MathBaseArgument = OneAndOnlyOne("m:e") # pyright: ignore[reportAssignmentType]
+
+    def to_latex(self) -> str:
+        base_latex = self.e.to_latex()
+        accent_char_xml = ""
+        char_pos_xml = ""
+
+        if self.groupChrPr is not None:
+            if self.groupChrPr.chr is not None:
+                accent_char_xml = self.groupChrPr.chr.val
+            if self.groupChrPr.pos is not None:
+                char_pos_xml = self.groupChrPr.pos.val
+            
+        if char_pos_xml == "top":
+            if accent_char_xml == "→": return f"\\vec{{{base_latex}}}"
+            if accent_char_xml == "←": return f"\\overleftarrow{{{base_latex}}}"
+            if accent_char_xml == "\u0305": return f"\\bar{{{base_latex}}}"
+            if accent_char_xml == "\u0302": return f"\\hat{{{base_latex}}}"
+            if accent_char_xml == "\u0303": return f"\\tilde{{{base_latex}}}"
+            if accent_char_xml == "\u0307": return f"\\dot{{{base_latex}}}"
+            if accent_char_xml == "\u0308": return f"\\ddot{{{base_latex}}}"
+        return f"{{{base_latex}}}"
 
 
 class CT_OMath(BaseOxmlElement):
     """`m:oMath` custom element class, representing a math equation."""
-
-    # Allow both runs (`m:r`) and delimiters (`m:d`, `m:sSub`, etc.) as direct children
-    # Order might matter, using Choice might be better if strict schema needed
-    # Add other expected math elements here as they are implemented
     r = ZeroOrMore("m:r")
     d = ZeroOrMore("m:d")
-    sSub = ZeroOrMore("m:sSub") # Add subscript
+    sSub = ZeroOrMore("m:sSub")
+    rad = ZeroOrMore("m:rad")
+    f = ZeroOrMore("m:f")
+    sSup = ZeroOrMore("m:sSup")
+    nary = ZeroOrMore("m:nary")
+    func = ZeroOrMore("m:func")
+    groupChr = ZeroOrMore("m:groupChr")
 
-    # Define corresponding _lst properties
     r_lst: list[CT_MathRun]
     d_lst: list[CT_MathDelimiter]
-    sSub_lst: list[CT_MathSubscript] # Add subscript list
-
-    # lxml element iteration preserves order, so we can iterate self
-
-    def _init(self) -> None:
-        # print(f"--- Initializing CT_OMath for tag: {self.tag} ---")
-        pass
+    sSub_lst: list[CT_MathSubscript]
+    rad_lst: list[CT_MathRad]
+    f_lst: list[CT_MathFraction]
+    sSup_lst: list[CT_MathSuperscript]
+    nary_lst: list[CT_MathNary]
+    func_lst: list[CT_MathFunc]
+    groupChr_lst: list[CT_MathGroupChar]
 
     def to_latex(self) -> str:
-        """Convert the oMath structure to a basic LaTeX string."""
-        latex_parts: list[str] = []  # Explicitly type latex_parts
-        # Iterate through children, lxml preserves document order
+        latex_parts: list[str] = []
         for child in self:
-            child_latex = "" # Default to empty string for unhandled types
-            # Use isinstance checks for known types with to_latex
-            if isinstance(child, CT_MathRun):
+            child_latex = ""
+            if hasattr(child, "to_latex") and callable(child.to_latex):
                 child_latex = child.to_latex()
-            elif isinstance(child, CT_MathDelimiter):
-                child_latex = child.to_latex()
-            elif isinstance(child, CT_MathSubscript):
-                child_latex = child.to_latex()
-            # Add elif cases for other math elements as they are implemented
-            else:
-                pass
-
             if child_latex:
                 latex_parts.append(child_latex)
+        return "".join(latex_parts)
 
-        final_latex = "".join(latex_parts)
-        # print(f"--- CT_OMath.to_latex() finished for {self.tag}, result: '{final_latex}' ---")
-        return final_latex
+
+class CT_MathOmathPara(BaseOxmlElement):
+    """`m:oMathPara` custom element class, a container for an `m:oMath` element and its paragraph properties."""
+    oMath: CT_OMath = OneAndOnlyOne("m:oMath")  # pyright: ignore[reportAssignmentType]
+
+    def to_latex(self) -> str:
+        return self.oMath.to_latex()
 
 
 class CT_Math(BaseOxmlElement):
-    """`a14:m` custom element class, container for `m:oMath`."""
-
-    oMath: CT_OMath = OneAndOnlyOne("m:oMath")  # pyright: ignore[reportAssignmentType]
-
-    def _init(self) -> None:
-        # print(f"--- Initializing CT_Math for tag: {self.tag} ---")
-        pass
+    """`a14:m` custom element class, container for `m:oMathPara`."""
+    oMathPara: CT_MathOmathPara = OneAndOnlyOne("m:oMathPara")  # pyright: ignore[reportAssignmentType]
 
     def to_latex(self) -> str:
-        """Return the LaTeX representation of the contained `m:oMath` element."""
-        latex_result = self.oMath.to_latex()
-        return latex_result
+        return self.oMathPara.to_latex()
 
     @property
     def text(self) -> str: # pyright: ignore[reportIncompatibleMethodOverride]
-        """Return LaTeX representation wrapped in $ delimiters."""
         latex_content = self.to_latex()
-        # print(f"--- CT_Math.text property called, LaTeX content: '{latex_content}' ---")
         return f"${latex_content}$"

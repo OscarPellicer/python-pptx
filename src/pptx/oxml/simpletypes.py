@@ -134,15 +134,20 @@ class XsdAnyUri(BaseStringType):
 
 class XsdBoolean(BaseSimpleType):
     @classmethod
-    def convert_from_xml(cls, str_value):
-        if str_value not in ("1", "0", "true", "false"):
-            raise InvalidXmlError(
-                "value must be one of '1', '0', 'true' or 'false', got '%s'" % str_value
-            )
-        return str_value in ("1", "true")
+    def convert_from_xml(cls, str_value: str):
+        # Make the comparison case-insensitive for robustness, e.g. True, TRUE, true
+        lower_str_value = str_value.lower()
+        if lower_str_value in ("1", "true", "on"):
+            return True
+        if lower_str_value in ("0", "false", "off"):
+            return False
+        raise InvalidXmlError(
+            "Boolean value must be one of '1', '0', 'true', 'false', 'on', or 'off' (case-insensitive), "
+            f"got '{str_value}'"
+        )
 
     @classmethod
-    def convert_to_xml(cls, value):
+    def convert_to_xml(cls, value: bool) -> str:
         return {True: "1", False: "0"}[value]
 
     @classmethod
