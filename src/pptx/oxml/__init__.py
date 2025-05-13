@@ -50,19 +50,27 @@ from pptx.oxml.text import (
 )
 
 # --- Import parser and lookup from the new module ---
-from .parser import element_class_lookup, parse_xml
+from .parser import element_class_lookup, oxml_parser, parse_xml
 
 if TYPE_CHECKING:
     from pptx.oxml.xmlchemy import BaseOxmlElement
 
 
+__all__ = [
+    "parse_xml",
+    "oxml_parser",
+    "register_element_cls",
+    "parse_from_template",
+    "element_class_lookup",
+]
+
+
 def parse_from_template(template_file_name: str):
     """Return an element loaded from the XML in the template file identified by `template_file_name`."""
-    # --- this path resolution is brittle, fix later
-    # --- assumes template files are in same directory as this module
-    # --- works for setup.py development mode, but not for package install
-    thisdir = os.path.split(__file__)[0]
-    template_path = os.path.join(thisdir, "templates", "%s.xml" % template_file_name)
+    # assumes template files are in same directory as this module
+    oxml_dir = os.path.split(__file__)[0]
+    pptx_dir = os.path.dirname(oxml_dir)
+    template_path = os.path.join(pptx_dir, "templates", "%s.xml" % template_file_name)
     with open(template_path, "rb") as f:
         xml_bytes = f.read()
     return parse_xml(xml_bytes)

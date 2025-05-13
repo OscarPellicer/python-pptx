@@ -68,12 +68,12 @@ def foo(xml_bytes):
 
 @pytest.fixture
 def fromstring(request):
-    return function_mock(request, "pptx.oxml.etree.fromstring")
+    return function_mock(request, "pptx.oxml.parser.etree.fromstring")
 
 
 @pytest.fixture
 def mock_oxml_parser(request):
-    return var_mock(request, "pptx.oxml.oxml_parser")
+    return var_mock(request, "pptx.oxml.parser.oxml_parser")
 
 
 @pytest.fixture

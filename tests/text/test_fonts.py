@@ -55,7 +55,8 @@ class DescribeFontFiles(object):
     def it_knows_os_x_font_dirs_to_help_find(self, osx_dirs_fixture):
         expected_dirs = osx_dirs_fixture
         font_dirs = FontFiles._os_x_font_directories()
-        assert font_dirs == expected_dirs
+        normalized_font_dirs = [p.replace("\\", "/") for p in font_dirs]
+        assert normalized_font_dirs == expected_dirs
 
     def it_knows_windows_font_dirs_to_help_find(self, win_dirs_fixture):
         expected_dirs = win_dirs_fixture

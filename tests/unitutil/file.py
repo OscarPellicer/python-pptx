@@ -2,6 +2,7 @@
 
 import os
 import sys
+import re
 
 _thisdir = os.path.split(__file__)[0]
 test_file_dir = os.path.abspath(os.path.join(_thisdir, "..", "test_files"))
@@ -15,7 +16,8 @@ def snippet_bytes(snippet_file_name: str):
     """Return bytes read from snippet file having `snippet_file_name`."""
     snippet_file_path = os.path.join(test_file_dir, "snippets", "%s.txt" % snippet_file_name)
     with open(snippet_file_path, "rb") as f:
-        return f.read().strip()
+        content_bytes = f.read()
+    return content_bytes.replace(b"\r\n", b"\n").strip()
 
 
 def snippet_seq(name: str, offset: int = 0, count: int = sys.maxsize):
@@ -27,9 +29,11 @@ def snippet_seq(name: str, offset: int = 0, count: int = sys.maxsize):
     path = os.path.join(test_file_dir, "snippets", "%s.txt" % name)
     with open(path, "rb") as f:
         text = f.read().decode("utf-8")
-    snippets = text.split("\n\n")
+    snippets = re.split(r"(?:\r?\n){2,}", text.strip())
     start, end = offset, offset + count
-    return tuple(snippets[start:end])
+    # Filter out empty strings that can result from re.split if there are e.g. 3+ newlines
+    processed_snippets = [s for s in snippets if s.strip()]
+    return tuple(processed_snippets[start:end])
 
 
 def snippet_text(snippet_file_name: str):
@@ -40,7 +44,7 @@ def snippet_text(snippet_file_name: str):
     snippet_file_path = os.path.join(test_file_dir, "snippets", "%s.txt" % snippet_file_name)
     with open(snippet_file_path, "rb") as f:
         snippet_bytes = f.read()
-    return snippet_bytes.decode("utf-8")
+    return snippet_bytes.decode("utf-8").replace("\r\n", "\n")
 
 
 def testfile(name: str):
