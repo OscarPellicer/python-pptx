@@ -13,7 +13,7 @@ from pptx.enum.text import (
     PP_PARAGRAPH_ALIGNMENT,
 )
 from pptx.exc import InvalidXmlError
-from pptx.oxml import parse_xml
+from pptx.oxml.parser import parse_xml
 from pptx.oxml.dml.fill import CT_GradientFillProperties
 from pptx.oxml.ns import nsdecls
 from pptx.oxml.simpletypes import (
@@ -388,7 +388,7 @@ class CT_TextLineBreak(BaseOxmlElement):
 class CT_TextNormalAutofit(BaseOxmlElement):
     """`a:normAutofit` element specifying fit text to shape font reduction, etc."""
 
-    fontScale = OptionalAttribute(
+    fontScale: float = OptionalAttribute(  # pyright: ignore[reportAssignmentType]
         "fontScale", ST_TextFontScalePercentOrPercentString, default=100.0
     )
 
@@ -403,10 +403,12 @@ class CT_TextParagraph(BaseOxmlElement):
     _add_r: Callable[[], CT_RegularTextRun]
 
     pPr: CT_TextParagraphProperties | None = ZeroOrOne(  # pyright: ignore[reportAssignmentType]
-        "a:pPr", successors=("a:r", "a:br", "a:fld", "a:endParaRPr")
+        "a:pPr", successors=("a:r", "a:br", "a:fld", "a14:m", "a:endParaRPr")
     )
-    r = ZeroOrMore("a:r", successors=("a:endParaRPr",))
-    br = ZeroOrMore("a:br", successors=("a:endParaRPr",))
+    r = ZeroOrMore("a:r", successors=("a:br", "a:fld", "a14:m", "a:endParaRPr"))
+    br = ZeroOrMore("a:br", successors=("a:fld", "a14:m", "a:endParaRPr"))
+    fld = ZeroOrMore("a:fld", successors=("a14:m", "a:endParaRPr"))
+    math = ZeroOrMore("a14:m", successors=("a:endParaRPr",))
     endParaRPr: CT_TextCharacterProperties | None = ZeroOrOne(
         "a:endParaRPr", successors=()
     )  # pyright: ignore[reportAssignmentType]
@@ -431,27 +433,29 @@ class CT_TextParagraph(BaseOxmlElement):
         paragraph).
         """
         for idx, r_str in enumerate(re.split("\n|\v", text)):
-            # ---breaks are only added _between_ items, not at start---
+            #breaks are only added _between_ items, not at start---
             if idx > 0:
                 self.add_br()
-            # ---runs that would be empty are not added---
+            #runs that would be empty are not added---
             if r_str:
                 self.add_r(r_str)
 
     @property
-    def content_children(self) -> tuple[CT_RegularTextRun | CT_TextLineBreak | CT_TextField, ...]:
+    def content_children(self) -> tuple[CT_RegularTextRun | CT_TextLineBreak | CT_TextField | CT_Math, ...]:
         """Sequence containing text-container child elements of this `a:p` element.
 
-        These include `a:r`, `a:br`, and `a:fld`.
+        These include `a:r`, `a:br`, `a:fld`, and `a14:m`.
         """
         return tuple(
-            e for e in self if isinstance(e, (CT_RegularTextRun, CT_TextLineBreak, CT_TextField))
+            e for e in self if isinstance(e, (
+                CT_RegularTextRun, CT_TextLineBreak, CT_TextField, CT_Math
+            ))
         )
 
     @property
     def text(self) -> str:  # pyright: ignore[reportIncompatibleMethodOverride]
         """str text contained in this paragraph."""
-        # ---note this shadows the lxml _Element.text---
+        #note this shadows the lxml _Element.text---
         return "".join([child.text for child in self.content_children])
 
     def _new_r(self):
@@ -616,3 +620,199 @@ class CT_TextSpacingPoint(BaseOxmlElement):
     val: Length = RequiredAttribute(  # pyright: ignore[reportAssignmentType]
         "val", ST_TextSpacingPoint
     )
+
+
+# ===========================================================================
+# MathML Element Classes
+# ===========================================================================
+
+class CT_MathText(BaseOxmlElement):
+    """`m:t` custom element class for math text."""
+
+    @property
+    def text(self) -> str: # pyright: ignore[reportIncompatibleMethodOverride]
+        """Text content of the element."""
+        # Parent implementation might be sufficient, but override if needed.
+        # Need to handle potential XML entities if they appear in math text.
+        text = super().text
+        return text or ""
+
+
+class CT_MathRun(BaseOxmlElement):
+    """`m:r` custom element class for a math run."""
+
+    _tag_seq = ("a:rPr", "m:t")
+    rPr: CT_TextCharacterProperties | None = ZeroOrOne("a:rPr", successors=_tag_seq[1:])  # pyright: ignore[reportAssignmentType]
+    t: CT_MathText = OneAndOnlyOne("m:t")  # pyright: ignore[reportAssignmentType]
+    del _tag_seq
+
+    def _init(self) -> None:
+        # print(f"--- Initializing CT_MathRun for tag: {self.tag}, text during init: '{self.t.text if self.t is not None else "NO_T_ELEM"}' ---")
+        pass
+
+    @property
+    def text(self) -> str: # pyright: ignore[reportIncompatibleMethodOverride]
+        """Text content of the `m:t` child."""
+        return self.t.text
+
+    def to_latex(self) -> str:
+        """Return the text content for LaTeX conversion."""
+        current_text = self.text
+        # print(f"--- CT_MathRun.to_latex() called for tag: {self.tag}, text: '{current_text}' ---")
+        if current_text == "×":
+            return "\\times "
+        return current_text
+
+
+class CT_MathBaseArgument(BaseOxmlElement):
+    """`m:e` custom element class, representing a base argument for math structures."""
+    # Can contain runs and potentially other math elements
+    r = ZeroOrMore("m:r")
+    # Define r_lst based on the ZeroOrMore definition
+    r_lst: list[CT_MathRun]
+
+    # Add sequence definitions for other potential children if needed
+
+    def to_latex(self) -> str:
+        """Convert the base argument content to a LaTeX string."""
+        return "".join(child.to_latex() for child in self.r_lst) # Simplified for now
+
+
+class CT_MathDelimiterProperties(BaseOxmlElement):
+    """`m:dPr` custom element class for delimiter properties."""
+    # Define children like m:begChr, m:endChr, m:ctrlPr etc. as needed
+    pass # Placeholder
+
+
+class CT_MathDelimiter(BaseOxmlElement):
+    """`m:d` custom element class for delimiters (parentheses, brackets, etc.)."""
+
+    dPr = ZeroOrOne("m:dPr") # Properties like begin/end characters
+    e = OneOrMore("m:e") # The content inside the delimiters
+
+    # Define e_lst based on the OneOrMore definition
+    e_lst: list[CT_MathBaseArgument]
+
+    def _init(self) -> None:
+        # print(f"--- Initializing CT_MathDelimiter for tag: {self.tag} ---")
+        pass
+
+    def to_latex(self) -> str:
+        """Convert the delimited structure to LaTeX.
+
+        Assumes parentheses if dPr is not detailed yet.
+        Handles content from all m:e elements.
+        TODO: Inspect dPr for specific begin/end chars when implemented.
+        """
+        begin_char = "("
+        end_char = ")"
+
+        if not self.e_lst:
+            # print(f"--- CT_MathDelimiter.to_latex() (empty) -> '()'")
+            return f"{begin_char}{end_char}" # Empty delimiters
+
+        # Concatenate LaTeX from ALL <m:e> children
+        content_latex = "".join(child_e.to_latex() for child_e in self.e_lst)
+        result = f"{begin_char}{content_latex}{end_char}"
+        # print(f"--- CT_MathDelimiter.to_latex() called for tag: {self.tag}, content: '{content_latex}', result: '{result}' ---")
+        return result
+
+
+class CT_MathSubscript(BaseOxmlElement):
+    """`m:sSub` custom element class for subscript structures."""
+
+    # According to schema, sSub contains exactly two `m:e` elements:
+    # e[0]: Base
+    # e[1]: Subscript
+    e = OneOrMore("m:e") # Should be exactly 2
+    e_lst: list[CT_MathBaseArgument]
+
+    def _init(self) -> None:
+        # print(f"--- Initializing CT_MathSubscript for tag: {self.tag} ---")
+        pass
+
+    def to_latex(self) -> str:
+        """Convert the subscript structure to LaTeX: base_{subscript}."""
+        if len(self.e_lst) != 2:
+            # print(f"WARN: Expected 2 <m:e> in <m:sSub>, found {len(self.e_lst)}. Concatenating.")
+            result = "".join(e.to_latex() for e in self.e_lst)
+            return result
+
+        base_latex = self.e_lst[0].to_latex()
+        subscript_latex = self.e_lst[1].to_latex()
+        result = ""
+
+        # Add braces if subscript is longer than one char or contains spaces/commands
+        if len(subscript_latex) > 1 or any(c in subscript_latex for c in r"\ {}[]()^_"): # Basic check
+            result = f"{base_latex}_{{{subscript_latex}}}"
+        else:
+            result = f"{base_latex}_{subscript_latex}"
+        return result
+
+
+class CT_OMath(BaseOxmlElement):
+    """`m:oMath` custom element class, representing a math equation."""
+
+    # Allow both runs (`m:r`) and delimiters (`m:d`, `m:sSub`, etc.) as direct children
+    # Order might matter, using Choice might be better if strict schema needed
+    # Add other expected math elements here as they are implemented
+    r = ZeroOrMore("m:r")
+    d = ZeroOrMore("m:d")
+    sSub = ZeroOrMore("m:sSub") # Add subscript
+
+    # Define corresponding _lst properties
+    r_lst: list[CT_MathRun]
+    d_lst: list[CT_MathDelimiter]
+    sSub_lst: list[CT_MathSubscript] # Add subscript list
+
+    # lxml element iteration preserves order, so we can iterate self
+
+    def _init(self) -> None:
+        # print(f"--- Initializing CT_OMath for tag: {self.tag} ---")
+        pass
+
+    def to_latex(self) -> str:
+        """Convert the oMath structure to a basic LaTeX string."""
+        latex_parts: list[str] = []  # Explicitly type latex_parts
+        # Iterate through children, lxml preserves document order
+        for child in self:
+            child_latex = "" # Default to empty string for unhandled types
+            # Use isinstance checks for known types with to_latex
+            if isinstance(child, CT_MathRun):
+                child_latex = child.to_latex()
+            elif isinstance(child, CT_MathDelimiter):
+                child_latex = child.to_latex()
+            elif isinstance(child, CT_MathSubscript):
+                child_latex = child.to_latex()
+            # Add elif cases for other math elements as they are implemented
+            else:
+                pass
+
+            if child_latex:
+                latex_parts.append(child_latex)
+
+        final_latex = "".join(latex_parts)
+        # print(f"--- CT_OMath.to_latex() finished for {self.tag}, result: '{final_latex}' ---")
+        return final_latex
+
+
+class CT_Math(BaseOxmlElement):
+    """`a14:m` custom element class, container for `m:oMath`."""
+
+    oMath: CT_OMath = OneAndOnlyOne("m:oMath")  # pyright: ignore[reportAssignmentType]
+
+    def _init(self) -> None:
+        # print(f"--- Initializing CT_Math for tag: {self.tag} ---")
+        pass
+
+    def to_latex(self) -> str:
+        """Return the LaTeX representation of the contained `m:oMath` element."""
+        latex_result = self.oMath.to_latex()
+        return latex_result
+
+    @property
+    def text(self) -> str: # pyright: ignore[reportIncompatibleMethodOverride]
+        """Return LaTeX representation wrapped in $ delimiters."""
+        latex_content = self.to_latex()
+        # print(f"--- CT_Math.text property called, LaTeX content: '{latex_content}' ---")
+        return f"${latex_content}$"

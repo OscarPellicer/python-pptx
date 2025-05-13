@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pptx.enum.dml import MSO_PATTERN_TYPE
-from pptx.oxml import parse_xml
+from pptx.oxml.parser import parse_xml
 from pptx.oxml.ns import nsdecls
 from pptx.oxml.simpletypes import (
     ST_Percentage,

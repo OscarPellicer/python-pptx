@@ -8,32 +8,38 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING, Type
 
-from lxml import etree
+# from lxml import etree # No longer directly used here
 
 from pptx.oxml.ns import NamespacePrefixedTag
+# --- Import the new MathML classes ---
+from pptx.oxml.text import (
+    CT_Math,
+    CT_MathBaseArgument,
+    CT_MathDelimiter,
+    CT_MathDelimiterProperties,
+    CT_MathRun,
+    CT_MathSubscript,
+    CT_MathText,
+    CT_OMath,
+)
+
+# --- Import parser and lookup from the new module ---
+from .parser import element_class_lookup, parse_xml
 
 if TYPE_CHECKING:
     from pptx.oxml.xmlchemy import BaseOxmlElement
 
 
-# -- configure etree XML parser ----------------------------
-element_class_lookup = etree.ElementNamespaceClassLookup()
-oxml_parser = etree.XMLParser(remove_blank_text=True, resolve_entities=False)
-oxml_parser.set_element_class_lookup(element_class_lookup)
-
-
 def parse_from_template(template_file_name: str):
-    """Return an element loaded from the XML in the template file identified by `template_name`."""
+    """Return an element loaded from the XML in the template file identified by `template_file_name`."""
+    # --- this path resolution is brittle, fix later
+    # --- assumes template files are in same directory as this module
+    # --- works for setup.py development mode, but not for package install
     thisdir = os.path.split(__file__)[0]
-    filename = os.path.join(thisdir, "..", "templates", "%s.xml" % template_file_name)
-    with open(filename, "rb") as f:
-        xml = f.read()
-    return parse_xml(xml)
-
-
-def parse_xml(xml: str | bytes):
-    """Return root lxml element obtained by parsing XML character string in `xml`."""
-    return etree.fromstring(xml, oxml_parser)
+    template_path = os.path.join(thisdir, "templates", "%s.xml" % template_file_name)
+    with open(template_path, "rb") as f:
+        xml_bytes = f.read()
+    return parse_xml(xml_bytes)
 
 
 def register_element_cls(nsptagname: str, cls: Type[BaseOxmlElement]):
@@ -484,3 +490,15 @@ register_element_cls("p:txBody", CT_TextBody)
 from pptx.oxml.theme import CT_OfficeStyleSheet  # noqa: E402
 
 register_element_cls("a:theme", CT_OfficeStyleSheet)
+
+# --- Register MathML elements (m: namespace) ---
+register_element_cls("m:oMath", CT_OMath)
+register_element_cls("m:r", CT_MathRun)
+register_element_cls("m:t", CT_MathText)
+register_element_cls("m:d", CT_MathDelimiter)
+register_element_cls("m:dPr", CT_MathDelimiterProperties)
+register_element_cls("m:e", CT_MathBaseArgument)
+register_element_cls("m:sSub", CT_MathSubscript)
+
+# --- Register container element (a14: namespace) ---
+register_element_cls("a14:m", CT_Math)

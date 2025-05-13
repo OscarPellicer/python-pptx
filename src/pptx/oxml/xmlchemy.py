@@ -9,7 +9,7 @@ from lxml import etree
 from lxml.etree import ElementBase, _Element  # pyright: ignore[reportPrivateUsage]
 
 from pptx.exc import InvalidXmlError
-from pptx.oxml import oxml_parser
+from pptx.oxml.parser import oxml_parser
 from pptx.oxml.ns import NamespacePrefixedTag, _nsmap, qn  # pyright: ignore[reportPrivateUsage]
 from pptx.util import lazyproperty
 

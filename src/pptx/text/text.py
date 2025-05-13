@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Iterator, cast
+from typing import TYPE_CHECKING, Iterator, cast, Union
 
 from pptx.dml.fill import FillFormat
 from pptx.enum.dml import MSO_FILL
@@ -14,6 +14,20 @@ from pptx.shapes import Subshape
 from pptx.text.fonts import FontFiles
 from pptx.text.layout import TextFitter
 from pptx.util import Centipoints, Emu, Length, Pt, lazyproperty
+from pptx.oxml.parser import parse_xml
+from pptx.oxml.ns import nsdecls
+# from pptx.oxml.xmlchemy import BaseOxmlElement, OneAndOnlyOne, ZeroOrOne, ZeroOrMore
+from pptx.oxml.text import (
+    CT_RegularTextRun,
+    CT_TextBody,
+    CT_TextCharacterProperties,
+    CT_TextParagraph,
+    CT_TextParagraphProperties,
+    CT_TextField,
+    CT_Math,
+    CT_TextLineBreak,
+)
+from pptx.types import ProvidesExtents, ProvidesPart
 
 if TYPE_CHECKING:
     from pptx.dml.color import ColorFormat
@@ -23,14 +37,7 @@ if TYPE_CHECKING:
         PP_PARAGRAPH_ALIGNMENT,
     )
     from pptx.oxml.action import CT_Hyperlink
-    from pptx.oxml.text import (
-        CT_RegularTextRun,
-        CT_TextBody,
-        CT_TextCharacterProperties,
-        CT_TextParagraph,
-        CT_TextParagraphProperties,
-    )
-    from pptx.types import ProvidesExtents, ProvidesPart
+    # from pptx.oxml.text import CT_TextFont
 
 
 class TextFrame(Subshape):
@@ -549,8 +556,24 @@ class _Paragraph(Subshape):
 
     @property
     def runs(self) -> tuple[_Run, ...]:
-        """Sequence of runs in this paragraph."""
-        return tuple(_Run(r, self) for r in self._element.r_lst)
+        """Sequence of |_Run| instances corresponding to the text runs in this
+        paragraph."""
+        runs: list[_Run] = []
+        for child in self._p.content_children:
+            # --- CT_RegularTextRun -> _Run ---
+            if isinstance(child, CT_RegularTextRun):
+                runs.append(_Run(child, self))
+            # --- CT_TextLineBreak -> _Run ---
+            elif isinstance(child, CT_TextLineBreak):
+                runs.append(_Run(child, self))
+            # --- CT_TextField -> _Run ---
+            elif isinstance(child, CT_TextField):
+                runs.append(_Run(child, self))
+            # --- CT_Math -> _Run ---
+            elif isinstance(child, CT_Math): # type: ignore
+                runs.append(_Run(child, self))
+
+        return tuple(runs)
 
     @property
     def space_after(self) -> Length | None:
@@ -632,50 +655,81 @@ class _Paragraph(Subshape):
         return self._p.get_or_add_pPr()
 
 
-class _Run(Subshape):
-    """Text run object. Corresponds to `a:r` child element in a paragraph."""
+# Define the union type for elements that a _Run can wrap, outside the class
+_RunElement = Union[CT_RegularTextRun, CT_TextLineBreak, CT_TextField, CT_Math]
 
-    def __init__(self, r: CT_RegularTextRun, parent: ProvidesPart):
+class _Run(Subshape):
+    """Text run object. Corresponds to `a:r` child element of `a:p`.
+
+    Also used for `a:br` and `a:fld` elements.
+    Now also used for `a14:m` elements.
+    """
+
+    def __init__(self, r: _RunElement, parent: ProvidesPart):
         super(_Run, self).__init__(parent)
-        self._r = r
+        self._r: _RunElement = r  # Store the element with the broader type
 
     @property
-    def font(self):
-        """|Font| instance containing run-level character properties for the text in this run.
-
-        Character properties can be and perhaps most often are inherited from parent objects such
-        as the paragraph and slide layout the run is contained in. Only those specifically
-        overridden at the run level are contained in the font object.
-        """
-        rPr = self._r.get_or_add_rPr()
-        return Font(rPr)
+    def font(self) -> Font | None: # Modified return type
+        """|_Font| object providing access to the character formatting for this
+        run."""
+        if isinstance(self._r, CT_RegularTextRun):
+            rPr = self._r.get_or_add_rPr()
+            return Font(rPr)
+        elif isinstance(self._r, (CT_TextLineBreak, CT_TextField)):
+            # Line breaks and fields can also have rPr
+            if self._r.rPr is not None:
+                return Font(self._r.rPr)
+        # CT_Math elements do not have a simple rPr for direct font manipulation like this
+        # Other types might also not have it, or it's handled differently.
+        return None
 
     @lazyproperty
     def hyperlink(self) -> _Hyperlink:
-        """Proxy for any `a:hlinkClick` element under the run properties element.
-
-        Created on demand, the hyperlink object is available whether an `a:hlinkClick` element is
-        present or not, and creates or deletes that element as appropriate in response to actions
-        on its methods and attributes.
-        """
-        rPr = self._r.get_or_add_rPr()
-        return _Hyperlink(rPr, self)
+        """|_Hyperlink| instance for this run, or |None| if it has no hyperlink."""
+        # Only CT_RegularTextRun can have hyperlinks in the way _Hyperlink expects
+        if isinstance(self._r, CT_RegularTextRun):
+            rPr = self._r.get_or_add_rPr() # Now this is safe
+            # _Hyperlink expects a non-optional rPr. If get_or_add_rPr always returns one, this is fine.
+            return _Hyperlink(rPr, self)
+        
+        # For other types (CT_Math, CT_TextLineBreak, CT_TextField), 
+        # they don't have hyperlinks in the same way.
+        # Raising an AttributeError is a clear way to indicate this.
+        raise AttributeError(
+            f"Hyperlink property is not applicable to run of type '{type(self._r).__name__}'."
+        )
 
     @property
-    def text(self):
-        """Read/write. A unicode string containing the text in this run.
+    def text(self) -> str:
+        """Read/write. Text of this run.
 
-        Assignment replaces all text in the run. The assigned value can be a 7-bit ASCII
-        string, a UTF-8 encoded 8-bit string, or unicode. String values are converted to
-        unicode assuming UTF-8 encoding.
-
-        Any other control characters in the assigned string other than tab or newline
-        are escaped as a hex representation. For example, ESC (ASCII 27) is escaped as
-        "_x001B_". Contrast the behavior of `TextFrame.text` and `_Paragraph.text` with
-        respect to line-feed and vertical-tab characters.
+        Replacement text must be a unicode string (not `bytes`). XML control
+        characters like `"\t"` and `"\n"` are escaped to `"_x0009_"` and
+        `"_x000A_"` respectively. Note that a line break (soft carriage-
+        return) is represented by a vertical tab character `"\v"` not `"\n"`.
+        `"\n"` characters are perhaps best avoided.
         """
-        return self._r.text
+        if isinstance(self._r, CT_Math):
+            return self._r.text  # This calls CT_Math.text, which returns LaTeX
+        elif isinstance(self._r, CT_TextLineBreak):
+            return "\n"  # Or "\v" depending on convention, but \n used in Paragraph.text
+        elif isinstance(self._r, (CT_RegularTextRun, CT_TextField)): # type: ignore
+            return self._r.text
+        return "" # Should not happen if Paragraph.runs is correct
 
     @text.setter
     def text(self, text: str):
-        self._r.text = text
+        if isinstance(self._r, CT_RegularTextRun):
+            self._r.text = text
+        elif isinstance(self._r, CT_TextField):
+            if self._r.t is None:
+                t_xml = "<a:t %s/>" % nsdecls('a')
+                new_t = parse_xml(t_xml)
+                self._r.append(new_t)
+            if self._r.t is not None:
+                 self._r.t.text = text
+        elif isinstance(self._r, CT_Math):
+            pass 
+        elif isinstance(self._r, CT_TextLineBreak): # type: ignore
+            pass
