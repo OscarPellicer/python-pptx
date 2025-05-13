@@ -269,6 +269,9 @@ class TextFrame(Subshape):
         def iter_rPrs(txBody: CT_TextBody) -> Iterator[CT_TextCharacterProperties]:
             for p in txBody.p_lst:
                 for elm in p.content_children:
+                    if isinstance(elm, CT_Math):  # CT_Math elements are handled differently
+                        continue
+                    # Assuming CT_RegularTextRun, CT_TextLineBreak, CT_TextField have get_or_add_rPr
                     yield elm.get_or_add_rPr()
                 # generate a:endParaRPr for each <a:p> element
                 yield p.get_or_add_endParaRPr()
@@ -678,8 +681,9 @@ class _Run(Subshape):
             return Font(rPr)
         elif isinstance(self._r, (CT_TextLineBreak, CT_TextField)):
             # Line breaks and fields can also have rPr
-            if self._r.rPr is not None:
-                return Font(self._r.rPr)
+            actual_rpr_element = self._r.rPr
+            if actual_rpr_element is not None:
+                return Font(cast(CT_TextCharacterProperties, actual_rpr_element))
         # CT_Math elements do not have a simple rPr for direct font manipulation like this
         # Other types might also not have it, or it's handled differently.
         return None
