@@ -14,6 +14,8 @@ from pptx.oxml.ns import NamespacePrefixedTag
 # --- Import the new MathML classes ---
 from pptx.oxml.text import (
     CT_Math,
+    CT_MathAccent,
+    CT_MathAccentProperties,
     CT_MathBaseArgument,
     CT_MathDegree,
     CT_MathDegreeHide,
@@ -43,6 +45,8 @@ from pptx.oxml.text import (
     CT_MathText,
     CT_OMath,
     CT_MathVal,
+    CT_MathSubSup,
+    CT_MathSubSupProperties,
 )
 
 # --- Import parser and lookup from the new module ---
@@ -543,6 +547,10 @@ register_element_cls("m:lim", CT_MathBaseArgument)
 register_element_cls("m:fName", CT_MathFName)
 register_element_cls("m:groupChr", CT_MathGroupChar)
 register_element_cls("m:groupChrPr", CT_MathGroupChrPr)
+register_element_cls("m:sSubSup", CT_MathSubSup)
+register_element_cls("m:sSubSupPr", CT_MathSubSupProperties)
+register_element_cls("m:acc", CT_MathAccent)
+register_element_cls("m:accPr", CT_MathAccentProperties)
 
 # Register container element (a14: namespace)
 register_element_cls("a14:m", CT_Math)

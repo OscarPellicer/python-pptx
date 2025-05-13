@@ -707,6 +707,8 @@ class CT_MathBaseArgument(BaseOxmlElement):
     nary = ZeroOrMore("m:nary")
     func = ZeroOrMore("m:func")
     groupChr = ZeroOrMore("m:groupChr")
+    sSubSup = ZeroOrMore("m:sSubSup")
+    acc = ZeroOrMore("m:acc")
 
     r_lst: list[CT_MathRun]
     d_lst: list[CT_MathDelimiter]
@@ -717,6 +719,8 @@ class CT_MathBaseArgument(BaseOxmlElement):
     nary_lst: list[CT_MathNary]
     func_lst: list[CT_MathFunc]
     groupChr_lst: list[CT_MathGroupChar]
+    sSubSup_lst: list[CT_MathSubSup]
+    acc_lst: list[CT_MathAccent]
 
     def to_latex(self) -> str:
         latex_parts: list[str] = []
@@ -1178,6 +1182,95 @@ class CT_MathGroupChar(BaseOxmlElement):
         return f"{{{base_latex}}}"
 
 
+class CT_MathAccentProperties(BaseOxmlElement):
+    """`m:accPr` custom element class for accent properties."""
+    _tag_seq = ("m:chr", "m:ctrlPr")
+    chr: CT_MathVal | None = ZeroOrOne("m:chr", successors=_tag_seq[1:])
+    del _tag_seq
+
+
+class CT_MathAccent(BaseOxmlElement):
+    """`m:acc` custom element class for accented characters (typically placed above)."""
+    accPr: CT_MathAccentProperties | None = ZeroOrOne("m:accPr", successors=("m:e",))
+    e: CT_MathBaseArgument = OneAndOnlyOne("m:e")
+
+    def to_latex(self) -> str:
+        base_latex = self.e.to_latex()
+        accent_char_xml = ""
+
+        if self.accPr is not None and self.accPr.chr is not None:
+            accent_char_xml = self.accPr.chr.val
+        
+        # Accent mapping for m:acc. Note: m:acc implies accent is above.
+        # Characters like U+0303 (Combining Tilde) are often used in m:val.
+        if accent_char_xml == "\u0303" or accent_char_xml == "~":  # Tilde (Combining or ASCII)
+            return f"\\tilde{{{base_latex}}}"
+        if accent_char_xml == "\u0302" or accent_char_xml == "^":  # Hat (Combining or ASCII)
+            return f"\\hat{{{base_latex}}}"
+        if accent_char_xml == "\u0305":                            # Macron (Combining Overline)
+            return f"\\bar{{{base_latex}}}"
+        if accent_char_xml == "\u0307":                            # Dot (Combining Dot Above)
+            return f"\\dot{{{base_latex}}}"
+        if accent_char_xml == "\u0308":                            # Double Dot (Combining Diaeresis)
+            return f"\\ddot{{{base_latex}}}"
+        if accent_char_xml == "→" or accent_char_xml == "\u2192":  # Vector arrow
+            return f"\\vec{{{base_latex}}}"
+        if accent_char_xml == "\u0301":                            # Acute Accent (Combining Acute Accent)
+            return f"\\acute{{{base_latex}}}"
+        if accent_char_xml == "\u0300":                            # Grave Accent (Combining Grave Accent)
+            return f"\\grave{{{base_latex}}}"
+        # Add more mappings as needed for m:acc elements.
+        
+        # Fallback for unhandled or unspecified accent characters
+        if accent_char_xml: # If an accent character was specified but not in map
+            # Using \operatorname or a custom command might be an option for unknown visual representation
+            # For now, just return base_latex with braces to indicate it was processed.
+            # Or, one could attempt a more direct LaTeX command if the accent_char_xml is a known LaTeX accent char.
+            return f"\\operatorname{{{_MATH_CHAR_TO_LATEX_CONVERSION.get(accent_char_xml, accent_char_xml).strip()}}}{{{base_latex}}}"
+
+        return f"{{{base_latex}}}" # Default if no accent char or unrecognized
+
+
+class CT_MathSubSupProperties(BaseOxmlElement):
+    """`m:sSubSupPr` custom element class for subscript-superscript properties."""
+    # This element typically holds <m:ctrlPr> for formatting control characters,
+    # but it's not directly used by the to_latex logic of the sSubSup structure itself.
+    pass
+
+
+class CT_MathSubSup(BaseOxmlElement):
+    """`m:sSubSup` custom element class for expressions with both subscript and superscript."""
+    sSubSupPr: CT_MathSubSupProperties | None = ZeroOrOne(
+        "m:sSubSupPr", successors=("m:e", "m:sub", "m:sup")
+    )
+    e: CT_MathBaseArgument = OneAndOnlyOne("m:e")
+    sub: CT_MathSubscriptArgument = OneAndOnlyOne("m:sub")
+    sup: CT_MathSuperscriptArgument = OneAndOnlyOne("m:sup")
+
+    def to_latex(self) -> str:
+        base_latex = self.e.to_latex()
+        sub_latex = self.sub.to_latex()
+        sup_latex = self.sup.to_latex()
+
+        sub_str = ""
+        if sub_latex:
+            # Add braces if subscript is multi-character or contains LaTeX control sequences
+            if len(sub_latex) > 1 or any(c in sub_latex for c in r"\\ {}[]()^_"):
+                sub_str = f"_{{{sub_latex}}}"
+            else:
+                sub_str = f"_{sub_latex}"
+
+        sup_str = ""
+        if sup_latex:
+            # Add braces if superscript is multi-character or contains LaTeX control sequences
+            if len(sup_latex) > 1 or any(c in sup_latex for c in r"\\ {}[]()^_"):
+                sup_str = f"^{{{sup_latex}}}"
+            else:
+                sup_str = f"^{sup_latex}"
+        
+        return f"{base_latex}{sub_str}{sup_str}"
+
+
 class CT_OMath(BaseOxmlElement):
     """`m:oMath` custom element class, representing a math equation."""
     r = ZeroOrMore("m:r")
@@ -1189,6 +1282,8 @@ class CT_OMath(BaseOxmlElement):
     nary = ZeroOrMore("m:nary")
     func = ZeroOrMore("m:func")
     groupChr = ZeroOrMore("m:groupChr")
+    sSubSup = ZeroOrMore("m:sSubSup")
+    acc = ZeroOrMore("m:acc")
 
     r_lst: list[CT_MathRun]
     d_lst: list[CT_MathDelimiter]
@@ -1199,6 +1294,8 @@ class CT_OMath(BaseOxmlElement):
     nary_lst: list[CT_MathNary]
     func_lst: list[CT_MathFunc]
     groupChr_lst: list[CT_MathGroupChar]
+    sSubSup_lst: list[CT_MathSubSup]
+    acc_lst: list[CT_MathAccent]
 
     def to_latex(self) -> str:
         latex_parts: list[str] = []

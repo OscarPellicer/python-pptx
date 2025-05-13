@@ -64,6 +64,8 @@ content_type_to_part_class_map: dict[str, type[Part]] = {
     CT.X_MS_VIDEO: MediaPart,
     # -- accommodate "image/jpg" as an alias for "image/jpeg" --
     "image/jpg": ImagePart,
+    "image/x-tiff": ImagePart,
+    "image/tif": ImagePart,
 }
 
 PartFactory.part_type_for.update(content_type_to_part_class_map)
