@@ -17,11 +17,15 @@ from pptx.oxml.text import (
     CT_MathAccent,
     CT_MathAccentProperties,
     CT_MathBaseArgument,
+    CT_MathBar,
+    CT_MathBarProperties,
     CT_MathDegree,
     CT_MathDegreeHide,
     CT_MathDelimiter,
     CT_MathDelimiterProperties,
     CT_MathDenominator,
+    CT_MathEqArray,
+    CT_MathEqArrayProperties,
     CT_MathFName,
     CT_MathFraction,
     CT_MathFractionPr,
@@ -30,10 +34,18 @@ from pptx.oxml.text import (
     CT_MathGroupChar,
     CT_MathGroupChrPr,
     CT_MathLimLow,
+    CT_MathMatrix,
+    CT_MathMatrixColumn,
+    CT_MathMatrixColumnProperties,
+    CT_MathMatrixColumns,
+    CT_MathMatrixProperties,
+    CT_MathMatrixRow,
     CT_MathNary,
     CT_MathNaryPr,
     CT_MathNumerator,
     CT_MathOmathPara,
+    CT_MathPrescript,
+    CT_MathPrescriptProperties,
     CT_MathRad,
     CT_MathRadPr,
     CT_MathRun,
@@ -568,4 +580,22 @@ register_element_cls("m:begChr", CT_MathVal)
 register_element_cls("m:endChr", CT_MathVal)
 register_element_cls("m:chr", CT_MathVal) # For m:naryPr/m:chr, m:groupChrPr/m:chr
 register_element_cls("m:pos", CT_MathVal) # For m:groupChrPr/m:pos
-# register_element_cls("m:sepChr", CT_MathVal) # If sepChr is added to CT_MathDelimiterProperties
+register_element_cls("m:sepChr", CT_MathVal)
+register_element_cls("m:count", CT_MathVal) # For m:mcPr/m:count
+register_element_cls("m:mcJc", CT_MathVal) # For m:mcPr/m:mcJc
+register_element_cls("m:subHide", CT_MathVal) # For m:naryPr
+register_element_cls("m:supHide", CT_MathVal) # For m:naryPr
+
+# New MathML element registrations
+register_element_cls("m:bar", CT_MathBar)
+register_element_cls("m:barPr", CT_MathBarProperties)
+register_element_cls("m:m", CT_MathMatrix)
+register_element_cls("m:mPr", CT_MathMatrixProperties)
+register_element_cls("m:mcs", CT_MathMatrixColumns)
+register_element_cls("m:mc", CT_MathMatrixColumn)
+register_element_cls("m:mcPr", CT_MathMatrixColumnProperties)
+register_element_cls("m:mr", CT_MathMatrixRow)
+register_element_cls("m:eqArr", CT_MathEqArray)
+register_element_cls("m:eqArrPr", CT_MathEqArrayProperties)
+register_element_cls("m:sPre", CT_MathPrescript)
+register_element_cls("m:sPrePr", CT_MathPrescriptProperties)
